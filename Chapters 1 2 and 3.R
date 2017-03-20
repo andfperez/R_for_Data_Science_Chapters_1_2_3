@@ -14,8 +14,6 @@
 
 
 
-
-library(tidyverse)
 mpg
 ?mpg
 ggplot(data=mpg) + 
@@ -448,3 +446,132 @@ percent_rank(y)
 cume_dist(y)
 
 # EXERCISES - PG 58
+
+# Convert dep_time, sched_dep_time and dep_delay to amore convenient measure - minutes after midnight
+mutate(flights, dep_time_min = dep_time %/% 100 * 60 + dep_time %% 100)
+mutate(flights, sched_dep_time_min = sched_dep_time %/% 100 * 60 + sched_dep_time %% 100)
+select(flights, dep_time, sched_dep_time, dep_time_min, sched_dep_time_min)
+
+
+dep_stats <- select(flights, dep_time, sched_dep_time, dep_delay)
+dep_stats <- mutate(dep_stats, dep_time_min = dep_time %/% 100 * 60 + dep_time %% 100, 
+                    sched_dep_time_min = sched_dep_time %/% 100 * 60 + sched_dep_time %% 100)
+View(dep_stats)
+# compare air_time with arr_time - dep_time
+transmute(flights, air_time, flight_time = arr_time - dep_time)
+  #not the same. Should be? What to do to fix?
+View(transmute(flights, air_time, dep_time, arr_time, flight_time = arr_time - dep_time))
+  # because they are not in minutes (like above) we would need to fix them
+  # there might also be a problem with time zone differences
+# compare dep_time, sched_dep_time and dep_delay. How should these be related?
+select(flights, dep_time, sched_dep_time, dep_delay)
+  # dep_time is the sum of sched_dep_time and dep_delay
+
+# Find the 10 most delayed flights using a rank function
+?ranking
+?min_rank()
+?ties.method
+?rank
+# the 10 most delayed flights
+flights %>%
+arrange(min_rank(desc(dep_delay)))
+# what is the result of this:
+1:3 + 1:10
+  # a vector [1, 2, 3] added to [1, :10] - adds 1 + 1 then 2 + 2.. and at 4 recycles the 1, 2, 3
+# what trigonometric functions does R provide?
+?Trig
+
+# Grouped summaries with summarize
+summarize(flights, delay = mean(dep_delay, na.rm = TRUE))
+  # Summaries are only useful when used together with group_by()
+  # changes the unit of analysis from the complete data set to individual groups
+
+by_day <- group_by(flights, year, month, day) # group flights by the date
+summarize(by_day, delay = mean(dep_delay, na.rm = TRUE))
+View(by_day)
+summarize(by_day, airtime = mean(air_time, na.rm = TRUE))
+
+by_dest <- group_by(flights, dest) # group flights by destination
+delay <- summarize(by_dest,
+                   count = n(),
+                   dist = mean(distance, na.rm = TRUE),
+                   delay = mean(arr_delay, na.rm = TRUE)
+) # summarize to compute average distance and average delay on arrival and number of flights
+delay <- filter(delay, count >20, dest != "HNL") # filter to remove noisy points and HNL which is twice the distance
+
+View(delay)
+View(arrange(delay, desc(delay)))
+   
+ggplot(data = delay, mapping = aes(x = dist, y = delay)) +
+  geom_point(aes(size = count), alpha = 1/3) +
+  geom_smooth(se = FALSE)
+# Geom smooth with method  = LOESS
+
+# we can do the same analyisis by using the pipe %>% 
+
+delays <- flights %>%
+  group_by(dest) %>%
+  summarize(
+    count = n(),
+    delay = mean(arr_delay, na.rm = TRUE),
+    dist = mean(distance, na.rm = TRUE)
+  ) %>%
+  filter(count >20, dest != "HNL")
+View(delays)
+
+# what happens if we don't use the na.rm = TRUE
+ flights %>%
+   group_by(dest) %>%
+   summarize(
+     count = n(),
+     delay = mean(arr_delay),
+     dist = mean(distance)
+   ) %>%
+   filter(count > 20, dest != "HNL")
+# this works on every variable that has NAs
+ flights %>%
+  group_by(year, month, day) %>%
+  summarize(mean = mean(dep_delay, na.rm = TRUE))
+
+# We can remove the cancelled flights and create a data set with only non-cancelled flights
+not_cancelled <- flights %>%
+  filter(!is.na(dep_delay), !is.na(arr_delay))
+View(not_cancelled)
+
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(mean = mean(dep_delay))
+# it is important to look at counts to make sure we aren't making assumptions on small
+# data. We can use the counts or a count of nonmissing values
+# look at the planes by tail number that have the highest avg. delays
+
+delays <- not_cancelled %>%
+  group_by(tailnum) %>%
+  summarize(
+    delay = mean(arr_delay)
+    )
+
+ggplot(data = delays, mapping = aes(x = delay)) +
+  geom_freqpoly(binwidth = 10)
+# there are some airplanes that have more than 300-min delays on average
+
+delays <- not_cancelled %>%
+  group_by(tailnum) %>%
+  summarize(delay = mean(arr_delay, na.rm = TRUE),
+            n = n()
+            )
+
+ggplot(data = delays, mapping = aes(x = delay, y = n)) +
+  geom_point(alpha = 1/10)
+# or
+ggplot(data = delays, mapping = aes(x = n, y = delay)) +
+  geom_point(alpha = 1/10)
+
+# Another alternative is to filter out the small outliers - we can do this by removing small counts
+
+delays %>%
+  filter(n > 25) %>%
+  ggplot(mapping = aes(x = n, y = delay)) +
+  geom_point(alpha = 1/10)
+
+
