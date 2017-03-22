@@ -570,8 +570,119 @@ ggplot(data = delays, mapping = aes(x = n, y = delay)) +
 # Another alternative is to filter out the small outliers - we can do this by removing small counts
 
 delays %>%
-  filter(n > 25) %>%
+  filter(n > 30) %>%
   ggplot(mapping = aes(x = n, y = delay)) +
   geom_point(alpha = 1/10)
 
 
+###############################################
+
+# Other patterns - Looking at batters in baseball
+
+install.packages("Lahman")
+batting <- as_tibble(Lahman::Batting)
+
+batters <- batting %>%
+  group_by(playerID) %>%
+  summarize(
+    ba = sum(H, na.rm = TRUE) / sum(AB, na.rm = TRUE),
+    ab = sum(AB, na.rm = TRUE)
+  )
+
+batters %>%
+  filter(ab > 100) %>%
+  ggplot(mapping = aes(x= ab, y = ba)) +
+  geom_point() + 
+  geom_smooth(se = FALSE)
+
+batters %>%
+    arrange(desc(ba))
+# Shows that the players with highest ba are only lucky, not talented
+batters %>% 
+  filter(ab > 100) %>%
+  arrange(desc(ba))
+  # the best is Ty Cobb!! 11434 at bats, 0.366 ba
+
+#############################################
+
+
+# back to flights
+
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(
+    # average delay
+    avg_delay1 = mean(arr_delay),
+    avg_delay2 = mean(arr_delay[arr_delay > 0])
+  )
+    # avg_delay2 is the mean arr_delay, when there actually is one (when more than 0)
+
+# why is distance to some destinations more variable than to others?
+not_cancelled %>%
+  group_by(dest) %>%
+  summarize(distance_sd = sd(distance)) %>%
+  arrange(desc(distance_sd))
+
+# when do the first and last flights leave each day?
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(
+    first = min(dep_time),
+    last = max(dep_time )
+  )
+
+# we can also use the nth function
+
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(
+    first = nth(dep_time, 2),
+    last_dep = last(dep_time)
+  )
+ 
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(
+    first_dep = first(dep_time),
+    second_tolast_dep = nth(dep_time, n()-1),
+    last_dep = last(dep_time)
+  )
+
+# filtering the ranks
+
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  mutate(r = min_rank(desc(dep_time))) %>%
+  filter(r %in% range(r))
+# range() returns a vector with min and max values
+# in this case they are the min and max of the by_group!!
+
+# which destination has the most carriers?
+not_cancelled %>%
+  group_by(dest) %>%
+  summarize(carriers = n_distinct(carrier)) %>%
+  arrange(desc(carriers))
+
+#dplyr includes a counter, which can be used together with a "weight" variable
+not_cancelled %>%
+  count(tailnum, wt = air_time) %>%
+  arrange(desc(n))
+  
+# this allows to count planes by air_time, for example. can also do by distance:
+not_cancelled %>%
+  count(tailnum, wt = distance) %>%
+  arrange(desc(n))
+  
+# Counts and Proportions
+# using logical values
+# when used with numeric functions, sum() and mean() can be useful - they can help calculate 
+# number of TRUEs and proportion of TRUES
+
+# how many flights left before 5 a.m.?
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(n_early = sum(dep_time < 500))
+# what proportion of flights are delayed by more than an hour?
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(n_delay = mean(arr_delay > 60))
