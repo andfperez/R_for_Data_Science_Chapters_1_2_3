@@ -686,3 +686,21 @@ not_cancelled %>%
 not_cancelled %>%
   group_by(year, month, day) %>%
   summarize(n_delay = mean(arr_delay > 60))
+
+# Grouping by multiple variables
+  # each summary peels off one level of the grouping
+
+daily <- group_by(flights, year, month, day)
+per_day <- summarize(daily, flights = n())
+per_day
+  # this way we can roll up the data set
+per_month = summarize(per_day, flights = sum(flights))
+per_month
+per_year <- summarize(per_month, flights = sum(flights))
+per_year
+# we can also ungroup:
+
+daily %>%
+  ungroup() %>% # no longer grouped by date
+  summarize(flights = n())
+
