@@ -570,8 +570,220 @@ ggplot(data = delays, mapping = aes(x = n, y = delay)) +
 # Another alternative is to filter out the small outliers - we can do this by removing small counts
 
 delays %>%
-  filter(n > 25) %>%
+  filter(n > 30) %>%
   ggplot(mapping = aes(x = n, y = delay)) +
   geom_point(alpha = 1/10)
+
+
+###############################################
+
+# Other patterns - Looking at batters in baseball
+
+install.packages("Lahman")
+batting <- as_tibble(Lahman::Batting)
+
+batters <- batting %>%
+  group_by(playerID) %>%
+  summarize(
+    ba = sum(H, na.rm = TRUE) / sum(AB, na.rm = TRUE),
+    ab = sum(AB, na.rm = TRUE)
+  )
+
+batters %>%
+  filter(ab > 100) %>%
+  ggplot(mapping = aes(x= ab, y = ba)) +
+  geom_point() + 
+  geom_smooth(se = FALSE)
+
+batters %>%
+    arrange(desc(ba))
+# Shows that the players with highest ba are only lucky, not talented
+batters %>% 
+  filter(ab > 100) %>%
+  arrange(desc(ba))
+  # the best is Ty Cobb!! 11434 at bats, 0.366 ba
+
+#############################################
+
+
+# back to flights
+
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(
+    # average delay
+    avg_delay1 = mean(arr_delay),
+    avg_delay2 = mean(arr_delay[arr_delay > 0])
+  )
+    # avg_delay2 is the mean arr_delay, when there actually is one (when more than 0)
+
+# why is distance to some destinations more variable than to others?
+not_cancelled %>%
+  group_by(dest) %>%
+  summarize(distance_sd = sd(distance)) %>%
+  arrange(desc(distance_sd))
+
+# when do the first and last flights leave each day?
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(
+    first = min(dep_time),
+    last = max(dep_time )
+  )
+
+# we can also use the nth function
+
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(
+    first = nth(dep_time, 2),
+    last_dep = last(dep_time)
+  )
+ 
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(
+    first_dep = first(dep_time),
+    second_tolast_dep = nth(dep_time, n()-1),
+    last_dep = last(dep_time)
+  )
+
+# filtering the ranks
+
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  mutate(r = min_rank(desc(dep_time))) %>%
+  filter(r %in% range(r))
+# range() returns a vector with min and max values
+# in this case they are the min and max of the by_group!!
+
+# which destination has the most carriers?
+not_cancelled %>%
+  group_by(dest) %>%
+  summarize(carriers = n_distinct(carrier)) %>%
+  arrange(desc(carriers))
+
+#dplyr includes a counter, which can be used together with a "weight" variable
+not_cancelled %>%
+  count(tailnum, wt = air_time) %>%
+  arrange(desc(n))
+  
+# this allows to count planes by air_time, for example. can also do by distance:
+not_cancelled %>%
+  count(tailnum, wt = distance) %>%
+  arrange(desc(n))
+  
+# Counts and Proportions
+# using logical values
+# when used with numeric functions, sum() and mean() can be useful - they can help calculate 
+# number of TRUEs and proportion of TRUES
+
+# how many flights left before 5 a.m.?
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(n_early = sum(dep_time < 500))
+# what proportion of flights are delayed by more than an hour?
+not_cancelled %>%
+  group_by(year, month, day) %>%
+  summarize(n_delay = mean(arr_delay > 60))
+
+# Grouping by multiple variables
+  # each summary peels off one level of the grouping
+
+daily <- group_by(flights, year, month, day)
+per_day <- summarize(daily, flights = n())
+per_day
+  # this way we can roll up the data set
+per_month = summarize(per_day, flights = sum(flights))
+per_month
+per_year <- summarize(per_month, flights = sum(flights))
+per_year
+# we can also ungroup:
+
+daily %>%
+  ungroup() %>% # no longer grouped by date
+  summarize(flights = n())
+
+# EXERCISES
+# a. think of another way to get this result
+not_cancelled %>%
+  count(dest)
+# solution:
+not_cancelled %>%
+  group_by(dest) %>%
+  summarize(n())
+# b. and this result:
+not_cancelled %>%
+  count(tailnum, wt = distance)
+# soultion
+not_cancelled %>%
+  group_by(tailnum) %>%
+  summarize(sum(distance))
+
+# Look at the number of cancelled flights per day. Is there a pattern?
+# Is the proportion of cancelled flights related to the average delay?
+
+flights %>%
+  group_by(day, month, year) %>%
+  summarize(cancelled = sum(is.na(dep_delay)), n = n(),
+            mean_dep_delay = mean(dep_delay, na.rm = TRUE)) %>%
+  ggplot(aes(x = cancelled / n)) + 
+  geom_point(aes(y = mean_dep_delay), alpha = 0.5)
+
+# Which carrier has the worst delays?
+
+flights %>% 
+  group_by(carrier) %>%
+  summarize(mean_dep_delay = mean(dep_delay, na.rm = TRUE), n = n()) %>%
+  arrange(desc(mean_dep_delay))
+  
+flights %>% 
+  group_by(carrier) %>%
+  summarize(median_delay = median(dep_delay, na.rm = TRUE), n = n(), delayed = sum(dep_delay>1, na.rm = TRUE), 
+            prop_delayed = delayed/n) %>%
+  arrange(desc(median_delay)) %>%
+  ggplot(aes(x = median_delay, y = prop_delayed)) + 
+  geom_jitter(mapping = aes(color = carrier, size = n), alpha = 0.6)
+
+# Grouped Mutates
+# find all the worst in a group
+flights_sml <- select(flights, year:day, ends_with("delay"), distance, air_time)
+flights_sml %>%
+  group_by(year, month, day) %>%
+  filter(rank(desc(arr_delay)) < 10)
+
+# find all groups bigger than a threshold
+popular_dest <- flights %>%
+  group_by(dest) %>%
+  filter(n() >  365)
+popular_dest
+
+# standardize to compute per group metrics
+popular_dest %>%
+  filter(arr_delay > 0) %>%
+  mutate(prop_delay = arr_delay / sum(arr_delay)) %>%
+  select(year:day, dest, arr_delay, prop_delay)
+# to learn more:
+vignette("window-functions")
+
+# EXERCISES 
+# which plane has the worst on-time record?
+
+flights %>%
+  group_by(tailnum) %>%
+  filter(arr_delay > 0) %>%
+  summarize(mean_delay = mean(arr_delay)) %>%
+  select(tailnum, mean_delay) %>%
+  arrange(desc(mean_delay))
+
+flights %>%
+  ggplot(aes(x=factor(hour), fill=arr_delay>5 | is.na(arr_delay))) + geom_bar()
+
+flights %>%
+  mutate(new_sched_dep_time = lubridate::make_datetime(year, month, day, hour, minute)) %>%
+  group_by(origin) %>%
+  arrange(new_sched_dep_time) %>%
+  mutate(prev_flight_dep_delay = lag(dep_delay)) %>%
+  ggplot(aes(x=prev_flight_dep_delay, y= dep_delay)) + geom_point() +geom_smooth()
 
 
