@@ -704,3 +704,86 @@ daily %>%
   ungroup() %>% # no longer grouped by date
   summarize(flights = n())
 
+# EXERCISES
+# a. think of another way to get this result
+not_cancelled %>%
+  count(dest)
+# solution:
+not_cancelled %>%
+  group_by(dest) %>%
+  summarize(n())
+# b. and this result:
+not_cancelled %>%
+  count(tailnum, wt = distance)
+# soultion
+not_cancelled %>%
+  group_by(tailnum) %>%
+  summarize(sum(distance))
+
+# Look at the number of cancelled flights per day. Is there a pattern?
+# Is the proportion of cancelled flights related to the average delay?
+
+flights %>%
+  group_by(day, month, year) %>%
+  summarize(cancelled = sum(is.na(dep_delay)), n = n(),
+            mean_dep_delay = mean(dep_delay, na.rm = TRUE)) %>%
+  ggplot(aes(x = cancelled / n)) + 
+  geom_point(aes(y = mean_dep_delay), alpha = 0.5)
+
+# Which carrier has the worst delays?
+
+flights %>% 
+  group_by(carrier) %>%
+  summarize(mean_dep_delay = mean(dep_delay, na.rm = TRUE), n = n()) %>%
+  arrange(desc(mean_dep_delay))
+  
+flights %>% 
+  group_by(carrier) %>%
+  summarize(median_delay = median(dep_delay, na.rm = TRUE), n = n(), delayed = sum(dep_delay>1, na.rm = TRUE), 
+            prop_delayed = delayed/n) %>%
+  arrange(desc(median_delay)) %>%
+  ggplot(aes(x = median_delay, y = prop_delayed)) + 
+  geom_jitter(mapping = aes(color = carrier, size = n), alpha = 0.6)
+
+# Grouped Mutates
+# find all the worst in a group
+flights_sml <- select(flights, year:day, ends_with("delay"), distance, air_time)
+flights_sml %>%
+  group_by(year, month, day) %>%
+  filter(rank(desc(arr_delay)) < 10)
+
+# find all groups bigger than a threshold
+popular_dest <- flights %>%
+  group_by(dest) %>%
+  filter(n() >  365)
+popular_dest
+
+# standardize to compute per group metrics
+popular_dest %>%
+  filter(arr_delay > 0) %>%
+  mutate(prop_delay = arr_delay / sum(arr_delay)) %>%
+  select(year:day, dest, arr_delay, prop_delay)
+# to learn more:
+vignette("window-functions")
+
+# EXERCISES 
+# which plane has the worst on-time record?
+
+flights %>%
+  group_by(tailnum) %>%
+  filter(arr_delay > 0) %>%
+  summarize(mean_delay = mean(arr_delay)) %>%
+  select(tailnum, mean_delay) %>%
+  arrange(desc(mean_delay))
+
+flights %>%
+  ggplot(aes(x=factor(hour), fill=arr_delay>5 | is.na(arr_delay))) + geom_bar()
+
+flights %>%
+  mutate(new_sched_dep_time = lubridate::make_datetime(year, month, day, hour, minute)) %>%
+  group_by(origin) %>%
+  arrange(new_sched_dep_time) %>%
+  mutate(prev_flight_dep_delay = lag(dep_delay)) %>%
+  ggplot(aes(x=prev_flight_dep_delay, y= dep_delay)) + geom_point() +geom_smooth()
+
+
